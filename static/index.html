@@ -482,12 +482,44 @@
               options.organization = _self.organization;
             }
 
-            _self.auth0.loginWithPopup(options).then(function () {
-              auth0.isAuthenticated().then(function (isAuthenticated) {
-                _self.isAuthenticated = isAuthenticated;
-                _self.showAuth0Info();
+            const loginWithPopupWithCancel = () =>
+              new Promise((resolve, reject) => {
+                let toRemove;
+                const origEventListener = window.addEventListener.bind(window);
+                window.addEventListener = (type, listener, opts) => {
+                  toRemove = listener;
+                  return origEventListener(type, listener, opts);
+                };
+                const popup = window.open(
+                  null,
+                  'my-popup',
+                  'top=100, left=100, width=400, height=600'
+                );
+                const interval = setInterval(() => {
+                  if (popup.closed) {
+                    clearInterval(interval);
+                    window.addEventListener = origEventListener;
+                    toRemove && window.removeEventListener('message', toRemove);
+                    auth0.isAuthenticated().then(function (isAuthenticated) {
+                      if (isAuthenticated) {
+                        resolve();
+                      } else {
+                        reject();
+                      }
+                    });
+                  }
+                }, 100);
+                _self.auth0.loginWithPopup(options, { popup });
               });
-            });
+
+            loginWithPopupWithCancel()
+              .then(function () {
+                _self.isAuthenticated = true;
+                _self.showAuth0Info();
+              })
+              .catch(() => {
+                _self.error = 'Login failed';
+              });
           },
           loginRedirect: function () {
             var _self = this;
